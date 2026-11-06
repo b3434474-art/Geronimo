@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+
+# Local application data — may contain private contact identifiers
+settings.json
+contacts.json
+*.local.json
+.env
+.env.*
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini
