@@ -50,12 +50,33 @@ def main() -> None:
     button = ttk.Button(frame, text="Find phone & test Bluetooth", command=run_test)
     button.pack(anchor="w")
 
-    ttk.Label(
-        frame,
-        text="Transport test only — cellular call controls and two-way call audio are not implemented.",
-        wraplength=420,
-        justify="left",
-    ).pack(anchor="w", pady=(22, 0))
+    ttk.Separator(frame).pack(fill="x", pady=18)
+    ttk.Label(frame, text="Phone call controls", font=("Segoe UI", 13, "bold")).pack(anchor="w")
+    ttk.Label(frame, text="Answer is always a deliberate manual action.", wraplength=420).pack(anchor="w", pady=(4, 8))
+    number = tk.StringVar()
+    ttk.Entry(frame, textvariable=number).pack(fill="x", pady=(0, 8))
+    ttk.Label(frame, text="Enter a number to open the phone dialer").pack(anchor="w")
+
+    def send_call_command(command: dict) -> None:
+        status.configure(text="Sending " + command.get("command", "command") + "…")
+        button.configure(state="disabled")
+        def worker() -> None:
+            try:
+                from geronimo.bridge import send_command_sync
+                result = send_command_sync(command)
+            except Exception as exc:
+                result = f"Command failed: {exc}"
+            root.after(0, lambda: finish(result))
+        threading.Thread(target=worker, daemon=True).start()
+
+    controls = ttk.Frame(frame)
+    controls.pack(anchor="w", pady=(8, 0))
+    ttk.Button(controls, text="Answer", command=lambda: send_call_command({"command": "ANSWER"})).pack(side="left", padx=(0, 6))
+    ttk.Button(controls, text="Decline", command=lambda: send_call_command({"command": "REJECT"})).pack(side="left", padx=(0, 6))
+    ttk.Button(controls, text="Hang up", command=lambda: send_call_command({"command": "DISCONNECT"})).pack(side="left", padx=(0, 6))
+    ttk.Button(controls, text="Dial", command=lambda: send_call_command({"command": "DIAL", "number": number.get(), "allowlisted": False})).pack(side="left")
+
+    ttk.Label(frame, text="Two-way call audio and incoming-call alerts back to Windows are still unfinished.", wraplength=420).pack(anchor="w", pady=(18, 0))
 
     ttk.Label(
         frame,
