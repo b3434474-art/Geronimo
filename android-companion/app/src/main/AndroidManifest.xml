@@ -11,8 +11,6 @@
         android:allowBackup="false"
         android:icon="@drawable/geronimo_icon_foreground"
         android:roundIcon="@drawable/geronimo_icon_foreground"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="Geronimo"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
