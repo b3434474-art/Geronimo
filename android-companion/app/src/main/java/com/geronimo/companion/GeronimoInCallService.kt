@@ -8,7 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
-import android.media.MediaPlayer
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -32,7 +33,7 @@ class GeronimoInCallService : InCallService() {
         @Volatile private var serviceInstance: GeronimoInCallService? = null
         private const val CHANNEL_ID = "geronimo_calls"
         private const val NOTIFICATION_ID = 4101
-        private var ringtone: MediaPlayer? = null
+        private var ringtone: Ringtone? = null
 
         /** Only a locally trusted outgoing contact may skip the system dialer confirmation. */
         fun placeCall(number: String, allowlisted: Boolean, contactName: String = "") {
@@ -67,7 +68,6 @@ class GeronimoInCallService : InCallService() {
 
         private fun stopRingtone() {
             try { ringtone?.stop() } catch (_: Exception) { }
-            try { ringtone?.release() } catch (_: Exception) { }
             ringtone = null
         }
     }
@@ -112,12 +112,12 @@ class GeronimoInCallService : InCallService() {
         val number = call.details.handle?.schemeSpecificPart ?: "Unknown number"
         when (state) {
             Call.STATE_RINGING -> {
-                startRingtone(R.raw.incoming_ringtone)
+                startRingtone(incoming = true)
                 showCallNotification("Incoming call", number)
                 CallBridge.send(JSONObject().put("event", "CALL_RINGING").put("number", number))
             }
             Call.STATE_DIALING, Call.STATE_CONNECTING -> {
-                startRingtone(R.raw.outgoing_ringtone)
+                startRingtone(incoming = false)
                 showCallNotification("Calling", number)
                 CallBridge.send(JSONObject().put("event", "CALL_DIALING").put("number", number))
             }
@@ -134,17 +134,19 @@ class GeronimoInCallService : InCallService() {
         }
     }
 
-    private fun startRingtone(resourceId: Int) {
+    private fun startRingtone(incoming: Boolean) {
         stopRingtone()
         try {
-            val player = MediaPlayer.create(this, resourceId) ?: return
-            player.setAudioAttributes(AudioAttributes.Builder()
+            val type = if (incoming) RingtoneManager.TYPE_RINGTONE else RingtoneManager.TYPE_NOTIFICATION
+            val uri = RingtoneManager.getDefaultUri(type) ?: return
+            val player = RingtoneManager.getRingtone(this, uri) ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) player.isLooping = true
+            player.audioAttributes = AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build())
-            player.isLooping = true
+                .build()
             ringtone = player
-            player.start()
+            player.play()
         } catch (_: Exception) {
             stopRingtone()
         }
