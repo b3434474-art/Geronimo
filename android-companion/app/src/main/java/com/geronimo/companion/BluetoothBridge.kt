@@ -14,6 +14,7 @@ import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
 import android.os.ParcelUuid
 import java.util.UUID
+import org.json.JSONObject
 
 /**
  * Minimal BLE GATT peripheral for local Geronimo messages.
@@ -124,8 +125,16 @@ class BluetoothBridge(
             ) {
                 if (characteristic.uuid == COMMAND_UUID) {
                     val message = value.toString(Charsets.UTF_8)
-                    if (message == "PING") onStatus("Bluetooth test received from Windows")
-                    else onStatus("Received message: ${message.take(80)}")
+                    if (message == "PING") {
+                        onStatus("Bluetooth test received from Windows")
+                    } else {
+                        try {
+                            CallBridge.handleCommand(JSONObject(message))
+                            onStatus("Received a call-control command from Windows")
+                        } catch (_: Exception) {
+                            onStatus("Ignored an invalid command from Windows")
+                        }
+                    }
                     if (responseNeeded) {
                         gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, byteArrayOf())
                     }
