@@ -12,7 +12,6 @@ import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
-import android.os.Build
 import android.os.ParcelUuid
 import java.util.UUID
 
@@ -33,6 +32,7 @@ class BluetoothBridge(
     private val appContext = context.applicationContext
     private val manager = appContext.getSystemService(BluetoothManager::class.java)
     private var gattServer: BluetoothGattServer? = null
+    private var advertiseCallback: AdvertiseCallback? = null
 
     @SuppressLint("MissingPermission")
     fun start() {
@@ -47,14 +47,10 @@ class BluetoothBridge(
             return
         }
 
-        val service = BluetoothGattService(
-            SERVICE_UUID,
-            BluetoothGattService.SERVICE_TYPE_PRIMARY
-        )
+        val service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
         val command = BluetoothGattCharacteristic(
             COMMAND_UUID,
-            BluetoothGattCharacteristic.PROPERTY_WRITE or
-                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
+            BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
             BluetoothGattCharacteristic.PERMISSION_WRITE
         )
         val status = BluetoothGattCharacteristic(
@@ -67,12 +63,54 @@ class BluetoothBridge(
         service.addCharacteristic(status)
 
         gattServer = manager.openGattServer(appContext, object : BluetoothGattServerCallback() {
+            override fun onServiceAdded(statusCode: Int, addedService: BluetoothGattService) {
+                if (statusCode != BluetoothGatt.GATT_SUCCESS) {
+                    onStatus("Could not register BLE service (code $statusCode)")
+                    return
+                }
+                val callback = object : AdvertiseCallback() {
+                    override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
+                        onStatus("Advertising for Geronimo Windows app")
+                    }
+
+                    override fun onStartFailure(errorCode: Int) {
+                        onStatus("BLE advertising failed (code $errorCode)")
+                    }
+                }
+                advertiseCallback = callback
+                advertiser.startAdvertising(
+                    AdvertiseSettings.Builder()
+                        .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                        .setConnectable(true)
+                        .setTimeout(0)
+                        .build(),
+                    AdvertiseData.Builder()
+                        .addServiceUuid(ParcelUuid(SERVICE_UUID))
+                        .build(),
+                    callback
+                )
+            }
+
             override fun onConnectionStateChange(device: BluetoothDevice, statusCode: Int, newState: Int) {
                 onStatus(if (newState == BluetoothGatt.STATE_CONNECTED) {
                     "Windows connected: ${device.name ?: "Geronimo PC"}"
                 } else {
                     "Advertising — waiting for Windows"
                 })
+            }
+
+            override fun onCharacteristicReadRequest(
+                device: BluetoothDevice,
+                requestId: Int,
+                offset: Int,
+                characteristic: BluetoothGattCharacteristic
+            ) {
+                if (characteristic.uuid == STATUS_UUID) {
+                    val value = "GERONIMO_READY".toByteArray(Charsets.UTF_8)
+                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                } else {
+                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_READ_NOT_PERMITTED, offset, null)
+                }
             }
 
             override fun onCharacteristicWriteRequest(
@@ -86,16 +124,13 @@ class BluetoothBridge(
             ) {
                 if (characteristic.uuid == COMMAND_UUID) {
                     val message = value.toString(Charsets.UTF_8)
-                    if (message == "PING") {
-                        onStatus("Bluetooth test received from Windows")
-                    } else {
-                        onStatus("Received message: ${message.take(80)}")
-                    }
+                    if (message == "PING") onStatus("Bluetooth test received from Windows")
+                    else onStatus("Received message: ${message.take(80)}")
                     if (responseNeeded) {
-                        gattServer?.sendResponse(
-                            device, requestId, BluetoothGatt.GATT_SUCCESS, offset, byteArrayOf()
-                        )
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, byteArrayOf())
                     }
+                } else if (responseNeeded) {
+                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_WRITE_NOT_PERMITTED, offset, null)
                 }
             }
         })
@@ -105,35 +140,17 @@ class BluetoothBridge(
             return
         }
         gattServer?.addService(service)
-        advertiser.startAdvertising(
-            AdvertiseSettings.Builder()
-                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-                .setConnectable(true)
-                .setTimeout(0)
-                .build(),
-            AdvertiseData.Builder()
-                .setIncludeDeviceName(true)
-                .addServiceUuid(ParcelUuid(SERVICE_UUID))
-                .build(),
-            object : AdvertiseCallback() {
-                override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-                    onStatus("Advertising for Geronimo Windows app")
-                }
-
-                override fun onStartFailure(errorCode: Int) {
-                    onStatus("BLE advertising failed (code $errorCode)")
-                }
-            }
-        )
     }
 
     @SuppressLint("MissingPermission")
     fun stop() {
         try {
-            manager.adapter?.bluetoothLeAdvertiser?.stopAdvertising(object : AdvertiseCallback() {})
+            val advertiser = manager.adapter?.bluetoothLeAdvertiser
+            advertiseCallback?.let { advertiser?.stopAdvertising(it) }
         } catch (_: SecurityException) {
             // Permissions may have been revoked while the activity was stopped.
         }
+        advertiseCallback = null
         gattServer?.close()
         gattServer = null
     }
