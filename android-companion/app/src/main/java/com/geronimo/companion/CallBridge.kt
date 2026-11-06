@@ -63,7 +63,7 @@ object CallBridge {
         }
     }
 
-    private fun handleCommand(command: JSONObject) {
+    fun handleCommand(command: JSONObject) {
         mainHandler.post {
             when (command.optString("command")) {
                 "ANSWER" -> {
