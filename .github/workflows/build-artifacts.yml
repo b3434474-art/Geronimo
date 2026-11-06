@@ -1,0 +1,72 @@
+name: Build Geronimo artifacts
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Build debug APK
+        working-directory: android-companion
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Geronimo-Android-APK
+          path: android-companion/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-app:
+    name: Build Windows executable
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install app dependencies and packager
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r windows-app/requirements.txt pyinstaller
+
+      - name: Build Windows executable
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name Geronimo --paths windows-app --hidden-import geronimo.bridge --collect-all bleak windows-app/geronimo/main.py
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Geronimo-Windows
+          path: dist/Geronimo.exe
+          if-no-files-found: error
+          retention-days: 14
