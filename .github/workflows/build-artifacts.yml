@@ -16,9 +16,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Expand integrated Geronimo sources
-        run: unzip -o integration/geronimo-integration-bundle.zip -d .
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -54,10 +51,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
-      - name: Expand integrated Geronimo sources
-        shell: pwsh
-        run: Expand-Archive -LiteralPath integration/geronimo-integration-bundle.zip -DestinationPath . -Force
 
       - name: Set up Python
         uses: actions/setup-python@v5
