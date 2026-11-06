@@ -7,6 +7,7 @@ It does not access cellular calls, contacts, microphone, or speaker audio.
 from __future__ import annotations
 
 import asyncio
+import json
 from bleak import BleakClient, BleakScanner
 
 SERVICE_UUID = "8f3a0001-7b2c-4d5e-9a10-1234567890ab"
@@ -38,3 +39,18 @@ async def test_connection() -> str:
 
 def test_connection_sync() -> str:
     return asyncio.run(test_connection())
+
+
+async def send_command(command: dict) -> str:
+    """Send a JSON call-control command to the paired Geronimo phone over BLE."""
+    device = await find_phone()
+    if device is None:
+        return "Phone not found. Open Geronimo on Android and keep it advertising."
+    async with BleakClient(device, timeout=15.0) as client:
+        payload = json.dumps(command, separators=(",", ":")).encode("utf-8")
+        await client.write_gatt_char(COMMAND_UUID, payload, response=True)
+        return f"Sent {command.get('command', 'command')} to {device.name or device.address}."
+
+
+def send_command_sync(command: dict) -> str:
+    return asyncio.run(send_command(command))
