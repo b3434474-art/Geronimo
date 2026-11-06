@@ -7,9 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.AudioAttributes
-import android.media.Ringtone
-import android.media.RingtoneManager
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -33,7 +31,7 @@ class GeronimoInCallService : InCallService() {
         @Volatile private var serviceInstance: GeronimoInCallService? = null
         private const val CHANNEL_ID = "geronimo_calls"
         private const val NOTIFICATION_ID = 4101
-        private var ringtone: Ringtone? = null
+        private var ringtonePlayer: MediaPlayer? = null
 
         /** Only a locally trusted outgoing contact may skip the system dialer confirmation. */
         fun placeCall(number: String, allowlisted: Boolean, contactName: String = "") {
@@ -67,8 +65,13 @@ class GeronimoInCallService : InCallService() {
         }
 
         private fun stopRingtone() {
-            try { ringtone?.stop() } catch (_: Exception) { }
-            ringtone = null
+            try {
+                ringtonePlayer?.let { player ->
+                    if (player.isPlaying) player.stop()
+                    player.release()
+                }
+            } catch (_: Exception) { }
+            ringtonePlayer = null
         }
     }
 
@@ -137,16 +140,11 @@ class GeronimoInCallService : InCallService() {
     private fun startRingtone(incoming: Boolean) {
         stopRingtone()
         try {
-            val type = if (incoming) RingtoneManager.TYPE_RINGTONE else RingtoneManager.TYPE_NOTIFICATION
-            val uri = RingtoneManager.getDefaultUri(type) ?: return
-            val player = RingtoneManager.getRingtone(this, uri) ?: return
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) player.isLooping = true
-            player.audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-            ringtone = player
-            player.play()
+            val soundRes = if (incoming) R.raw.incoming_ringtone else R.raw.outgoing_ringtone
+            val player = MediaPlayer.create(this, soundRes) ?: return
+            player.isLooping = true
+            ringtonePlayer = player
+            player.start()
         } catch (_: Exception) {
             stopRingtone()
         }
