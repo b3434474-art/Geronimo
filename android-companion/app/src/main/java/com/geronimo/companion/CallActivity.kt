@@ -1,14 +1,17 @@
 package com.geronimo.companion
 
 import android.app.Activity
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.telecom.Call
+import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 
-/** Simple in-call screen. Answer is always a deliberate button press. */
+/** Incoming-call UI inspired by the supplied sketch. Answer is always manual. */
 class CallActivity : Activity() {
     private lateinit var caller: TextView
     private lateinit var state: TextView
@@ -20,50 +23,100 @@ class CallActivity : Activity() {
         super.onCreate(savedInstanceState)
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 56, 32, 32)
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(28, 48, 28, 32)
+            setBackgroundColor(Color.WHITE)
         }
         layout.addView(TextView(this).apply {
-            text = "Geronimo"
-            textSize = 30f
+            text = "GERONIMO"
+            textSize = 16f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+        })
+        layout.addView(TextView(this).apply {
+            text = "Incoming call"
+            textSize = 20f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 52, 0, 8)
         })
         caller = TextView(this).apply {
-            textSize = 22f
-            setPadding(0, 28, 0, 12)
+            textSize = 30f
+            setTextColor(Color.BLACK)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 8)
         }
         layout.addView(caller)
-        state = TextView(this).apply { textSize = 16f }
+        state = TextView(this).apply {
+            textSize = 16f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 64)
+        }
         layout.addView(state)
 
-        answer = Button(this).apply {
-            text = "Answer"
-            setOnClickListener {
-                val call = GeronimoInCallService.activeCall
-                if (call?.state == Call.STATE_RINGING) {
-                    call.answer(android.telecom.VideoProfile.STATE_AUDIO_ONLY)
-                    refresh()
-                }
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        answer = callButton("☎", "Answer", Color.rgb(35, 220, 0), "Answer incoming call") {
+            val call = GeronimoInCallService.activeCall
+            if (call?.state == Call.STATE_RINGING) {
+                call.answer(android.telecom.VideoProfile.STATE_AUDIO_ONLY)
+                refresh()
             }
         }
-        decline = Button(this).apply {
-            text = "Decline"
-            setOnClickListener {
-                val call = GeronimoInCallService.activeCall
-                if (call?.state == Call.STATE_RINGING) call.reject(false, null)
-                finish()
-            }
+        decline = callButton("☎", "Decline", Color.rgb(240, 0, 20), "Decline incoming call") {
+            val call = GeronimoInCallService.activeCall
+            if (call?.state == Call.STATE_RINGING) call.reject(false, null)
+            finish()
         }
-        hangUp = Button(this).apply {
-            text = "Hang up"
-            setOnClickListener {
-                GeronimoInCallService.activeCall?.disconnect()
-                finish()
-            }
+        hangUp = callButton("☎", "Hang up", Color.rgb(240, 0, 20), "End current call") {
+            GeronimoInCallService.activeCall?.disconnect()
+            finish()
         }
-        layout.addView(answer)
-        layout.addView(decline)
-        layout.addView(hangUp)
+        actions.addView(actionColumn(answer))
+        actions.addView(actionColumn(decline))
+        actions.addView(actionColumn(hangUp))
+        layout.addView(actions)
         setContentView(layout)
         refresh()
+    }
+
+    private fun callButton(symbol: String, label: String, color: Int, description: String, action: () -> Unit): Button {
+        return Button(this).apply {
+            text = symbol
+            textSize = 30f
+            contentDescription = description
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(color)
+            }
+            isAllCaps = false
+            setOnClickListener { action() }
+        }
+    }
+
+    private fun actionColumn(button: Button): LinearLayout {
+        val label = when (button) {
+            answer -> "Answer"
+            decline -> "Decline"
+            else -> "Hang up"
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(14, 0, 14, 0)
+            addView(button, LinearLayout.LayoutParams(104, 104))
+            addView(TextView(this@CallActivity).apply {
+                text = label
+                textSize = 15f
+                setTextColor(Color.DKGRAY)
+                gravity = Gravity.CENTER
+                setPadding(0, 12, 0, 0)
+            })
+        }
     }
 
     override fun onResume() {
@@ -84,7 +137,7 @@ class CallActivity : Activity() {
         caller.text = call.details.handle?.schemeSpecificPart ?: "Unknown caller"
         when (call.state) {
             Call.STATE_RINGING -> {
-                state.text = "Incoming call — choose whether to answer"
+                state.text = "is calling"
                 answer.visibility = View.VISIBLE
                 decline.visibility = View.VISIBLE
                 hangUp.visibility = View.GONE
