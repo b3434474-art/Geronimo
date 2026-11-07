@@ -11,7 +11,7 @@ The phone accepts call commands only from a Bluetooth-bonded PC. BLE notificatio
 
 ## Why laptop call audio is not included
 
-Microsoft's Windows Bluetooth accessory guidance describes the PC as the Audio Gateway (AG) and a headset-style accessory as the Hands-Free unit (HF). HFP uses the HF unit as the remote microphone/speaker for the AG.【turn484453search0】【turn484453search1】 This documented Windows accessory arrangement does not provide the phone-facing HF endpoint required to route the phone's cellular call audio through the laptop.
+Microsoft's Windows Bluetooth accessory guidance describes the PC as the Audio Gateway (AG) and a headset-style accessory as the Hands-Free unit (HF). HFP uses the HF unit as the remote microphone/speaker for the AG.[Microsoft Bluetooth accessory guidance](https://learn.microsoft.com/en-us/windows-hardware/design/accessory-guidelines/bluetooth-accessory-guidelines/bluetooth-accessory-guidelines-classic-audio)[Microsoft Bluetooth terminology](https://learn.microsoft.com/en-us/windows-hardware/design/accessory-guidelines/bluetooth-accessory-guidelines/bluetooth-accessory-guidelines-terminology) This documented Windows accessory arrangement does not provide the phone-facing HF endpoint required to route the phone's cellular call audio through the laptop.
 
 ## Acceptance test for any future audio route
 
