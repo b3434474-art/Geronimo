@@ -4,7 +4,7 @@
 
 1. **Windows desktop assistant** — preserves the original full-screen navy-and-blue assistant and adds a phone connection strip, call popup, outgoing dial panel and trusted-contact manager.
 2. **Android companion** — registers an Android `InCallService` when the user grants the default-phone-app role. A foreground connected-device service keeps the BLE phone link available while the app is backgrounded.
-3. **Bluetooth LE transport** — a GATT service carries JSON call commands from Windows to Android and fragmented JSON state notifications from Android to Windows. It carries no live voice audio.
+3. **Bluetooth LE transport** — a GATT service accepts only bonded Bluetooth devices and carries JSON call commands from Windows to Android plus fragmented JSON state notifications from Android to Windows. It carries no live voice audio.
 
 ## Call policy
 
@@ -16,7 +16,7 @@
 | Hang up | Only after a deliberate user action. |
 | Outgoing number in phone-side allowlist | May call directly only if Android's CALL_PHONE permission is also granted. |
 | Other outgoing number | Open Android's dialer so the user confirms and places the call. |
-| Lost connection | Windows cannot send further call commands; reconnect before controls are used. |
+| Lost or untrusted connection | The phone rejects commands from unbonded devices. |
 
 The allowlist is stored locally on Android, synced from the user's Windows contact manager, and applies only to outgoing calls. It cannot change incoming-call behavior.
 
@@ -25,6 +25,7 @@ The allowlist is stored locally on Android, synced from the user's Windows conta
 - [x] Preserve the supplied original desktop assistant source and design.
 - [x] Add Windows phone connection UI and call popup.
 - [x] Implement bidirectional BLE GATT commands and notifications.
+- [x] Require Bluetooth bonding before the phone accepts call commands.
 - [x] Add Android call-state integration and caller-name lookup (permission-gated).
 - [x] Add Android foreground BLE phone-link service.
 - [x] Add phone-side trusted outgoing-number list.
@@ -36,4 +37,4 @@ The allowlist is stored locally on Android, synced from the user's Windows conta
 
 ## Audio limitation
 
-BLE pairing and notification delivery are not a voice channel. Windows 10's built-in Bluetooth HFP role is not the required phone-facing hands-free endpoint for routing cellular audio to the laptop. Call audio remains unavailable in this build.
+BLE pairing and notification delivery are not a voice channel. Microsoft's Windows accessory guidance describes the PC as the Audio Gateway (AG) for a Bluetooth headset-type accessory while the accessory acts as the Hands-Free unit (HF). That is not the phone-facing HF role this cellular-audio route requires.【turn484453search0】
