@@ -12,7 +12,7 @@ py -m pip install -r requirements.txt
 py -m geronimo.main
 ```
 
-The Python app needs the phone's Geronimo companion to be open and advertising. Press **Connect** in the Windows app. BLE carries call-state messages and call-control commands, not live call audio.
+Pair the Dell PC and Galaxy A15 in normal Windows Bluetooth settings before using the phone link. The Android phone accepts commands only from a bonded PC. Open Geronimo on Android and leave its phone-link foreground notification enabled. Press **Connect** in the Windows app. BLE carries call-state messages and call-control commands, not live call audio.
 
 ## Original offline-assistant features
 
@@ -23,13 +23,13 @@ The Python app needs the phone's Geronimo companion to be open and advertising. 
 
 ## Phone companion
 
-The phone link supports call notifications, caller names when Android permissions permit, answer/decline/hang-up controls, mute/speaker commands, outgoing dialing, and a locally saved trusted-outgoing-number list. A trusted number can skip the dialer confirmation only if the phone-side allowlist contains the exact number and the user has granted Android's CALL_PHONE permission. Unknown numbers open the Android dialer for manual confirmation.
+The phone link supports call notifications, caller names when Android permissions permit, answer/decline/hang-up controls, mute/speaker commands, outgoing dialing, and a locally saved trusted-outgoing-number list. A trusted number can skip the dialer confirmation only if the phone-side allowlist contains the exact number and the user has granted Android's CALL_PHONE permission. Otherwise unknown numbers open the Android dialer for manual confirmation.
 
 Incoming calls are never auto-answered. Answer requires a deliberate tap on the phone or Windows call popup.
 
 ## Audio limitation
 
-BLE transports small command and event messages, not voice. Windows 10's built-in Bluetooth Hands-Free Profile implementation normally makes the PC the Audio Gateway for a headset-style accessory; it does not provide the needed phone-to-PC hands-free endpoint for routing cellular call audio through the laptop microphone and speakers. This build therefore does not claim laptop call audio.
+BLE transports small command and event messages, not voice. Microsoft's Windows accessory guidance describes the PC as the HFP Audio Gateway while an audio accessory such as a headset acts as the Hands-Free unit. That built-in arrangement does not provide the phone-facing Hands-Free endpoint needed for this phone-to-laptop audio route. This build does not claim laptop call audio.
 
 ## Build artifacts
 
