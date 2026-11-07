@@ -7,8 +7,9 @@ Geronimo keeps the original full-screen navy-and-blue voice-assistant interface 
 Requires Python 3.10+ on Windows. The first run restores the original assistant module from its compressed source file.
 
 ```powershell
-py -m pip install -r windows-app/requirements.txt
-py windows-app/geronimo/main.py
+cd windows-app
+py -m pip install -r requirements.txt
+py -m geronimo.main
 ```
 
 The Python app needs the phone's Geronimo companion to be open and advertising. Press **Connect** in the Windows app. BLE carries call-state messages and call-control commands, not live call audio.
