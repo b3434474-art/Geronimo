@@ -1,48 +1,52 @@
 # Geronimo
 
-Geronimo is a local-first phone companion project for a Windows PC and an Android phone.
+Geronimo is a local-first Windows voice assistant with an Android phone companion.
 
 ## Project layout
 
-- `windows-app/` — Python desktop app for the computer.
-- `android-companion/` — Kotlin Android companion app.
-- `docs/` — architecture notes and Bluetooth research.
+- `windows-app/` — the original Python desktop assistant plus the phone controls.
+- `android-companion/` — Kotlin Android companion for call events and call controls.
+- `docs/` — architecture and Bluetooth audio notes.
 
-## Intended behavior
+## Original desktop features
 
-- The Android phone and Windows computer communicate over a local Bluetooth connection.
-- **Incoming calls always require an explicit accept/decline action.** Geronimo must never auto-answer.
-- A locally stored contact allowlist may reduce confirmation prompts for **outgoing** calls only. It must never change incoming-call behavior.
-- Call controls should remain unavailable until a real, authenticated phone-to-PC connection is established.
-- No cloud account or paid backend is required for the planned local connection.
+The original navy-and-blue interface and pulsing orb are retained. The app includes local Ollama AI, optional push-to-listen offline Vosk recognition, spoken replies, calculator, timer, jokes, facts, and optional Night Watch camera motion indication.
 
-## Important status
+Ollama and the Vosk speech model are separate free downloads; neither is bundled in the executable. Night Watch is an opt-in local camera feature, not a certified security system.
 
-This repository currently contains the initial app scaffolding and call-approval policy, not a completed phone integration. In particular, pairing two devices does not by itself make Windows a cellular-call audio endpoint. Two-way call audio and reliable call-control routing are research/implementation tasks and must be verified on the actual phone and PC before being described as working.
+## Phone companion features
+
+- Local Bluetooth LE connection with call-state notifications in both directions.
+- Incoming call popup on Windows, with manual Answer and Decline.
+- Hang up, mute, and speaker commands.
+- Outgoing dialing from Windows; unknown numbers open the Android dialer for manual confirmation.
+- Phone-side trusted-number allowlist for outgoing calls only.
+- Caller-name lookup from carrier caller ID, local allowlist, or contacts when permission is granted.
+- Custom incoming and outgoing MP3 ringtones on Android.
+- Android foreground service to maintain the phone-link connection while in the background.
+
+**Incoming calls are never answered automatically.** The user must explicitly choose Answer on the phone or Windows call popup.
+
+## Audio limitation
+
+The BLE channel transfers call metadata and commands, not voice. The Windows 10 Bluetooth stack used by this project does not provide the phone-to-PC Hands-Free Profile endpoint required for cellular call audio through the laptop speakers and microphone. Two-way PC call audio is therefore not included or verified.
+
+## Build status
+
+GitHub Actions builds the Android debug APK and Windows executable when `main` changes. Check the latest Actions run for the result and download its artifacts. Artifacts are retained for 14 days.
 
 ## Development
 
-### Windows app
-
-Requires Python 3.10 or newer. From `windows-app`:
+Windows source run (PowerShell):
 
 ```powershell
-python -m geronimo.main
+cd windows-app
+py -m pip install -r requirements.txt
+py -m geronimo.main
 ```
 
-Run the policy tests:
+Android Studio: open `android-companion/`, sync Gradle, and use JDK 17 / Android SDK 36.
 
-```powershell
-python -m unittest discover -s tests -v
-```
+## Privacy
 
-### Android companion
-
-Open `android-companion/` in Android Studio and let Gradle sync. Use JDK 17 and install Android SDK 36. The Android module is an informational starter screen; it does not yet request call permissions or act as the default phone app.
-
-## Privacy and safety
-
-- Do not commit real phone numbers, contact lists, call logs, credentials, pairing secrets, or local settings.
-- Store any future allowlist on the user's device, not in Git.
-- Ask for permission before enabling call-related Android capabilities.
-- Keep incoming-call approval mandatory.
+Call details and trusted numbers remain on the phone/PC and are transferred only over the local paired BLE connection. The contacts permission is optional. Do not commit phone numbers, contacts, call logs, credentials, or pairing secrets.
