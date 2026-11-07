@@ -29,7 +29,7 @@ Ollama and the Vosk speech model are separate free downloads; neither is bundled
 
 ## Audio limitation
 
-The BLE channel transfers call metadata and commands, not voice. Microsoft's documented Windows Bluetooth accessory model makes the PC the Hands-Free Profile Audio Gateway, while an accessory such as a headset is the Hands-Free unit. That built-in configuration is not the phone-facing Hands-Free endpoint needed for laptop call audio, so two-way PC call audio is not included or verified.【turn484453search0】
+The BLE channel transfers call metadata and commands, not voice. Microsoft's documented Windows Bluetooth accessory model makes the PC the Hands-Free Profile Audio Gateway, while an accessory such as a headset is the Hands-Free unit. That built-in configuration is not the phone-facing Hands-Free endpoint needed for laptop call audio, so two-way PC call audio is not included or verified.[Microsoft Bluetooth accessory guidance](https://learn.microsoft.com/en-us/windows-hardware/design/accessory-guidelines/bluetooth-accessory-guidelines/bluetooth-accessory-guidelines-classic-audio)
 
 ## Build status
 
