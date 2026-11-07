@@ -108,10 +108,15 @@ class BluetoothBridge(
 
             override fun onConnectionStateChange(device: BluetoothDevice, statusCode: Int, newState: Int) {
                 if (newState == BluetoothGatt.STATE_CONNECTED) {
+                    if (device.bondState != BluetoothDevice.BOND_BONDED) {
+                        gattServer?.cancelConnection(device)
+                        onStatus("Bluetooth pairing required: pair this PC and phone in system settings first")
+                        return
+                    }
                     connectedDevice = device
                     notificationsEnabled = false
                     negotiatedMtu = 23
-                    onStatus("Windows connected: ${device.name ?: "Geronimo PC"}")
+                    onStatus("Paired Windows PC connected: ${device.name ?: "Geronimo PC"}")
                 } else {
                     if (connectedDevice?.address == device.address) {
                         connectedDevice = null
@@ -131,6 +136,10 @@ class BluetoothBridge(
                 offset: Int,
                 characteristic: BluetoothGattCharacteristic
             ) {
+                if (device.bondState != BluetoothDevice.BOND_BONDED || connectedDevice?.address != device.address) {
+                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
+                    return
+                }
                 if (characteristic.uuid == STATUS_UUID) {
                     val value = statusCharacteristic?.value ?: "GERONIMO_READY".toByteArray(Charsets.UTF_8)
                     gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
@@ -148,6 +157,10 @@ class BluetoothBridge(
                 offset: Int,
                 value: ByteArray
             ) {
+                if (device.bondState != BluetoothDevice.BOND_BONDED || connectedDevice?.address != device.address) {
+                    if (responseNeeded) gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
+                    return
+                }
                 if (descriptor.uuid == CCCD_UUID) {
                     val enabled = value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
                     notificationsEnabled = enabled
@@ -168,6 +181,10 @@ class BluetoothBridge(
                 offset: Int,
                 value: ByteArray
             ) {
+                if (device.bondState != BluetoothDevice.BOND_BONDED || connectedDevice?.address != device.address) {
+                    if (responseNeeded) gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null)
+                    return
+                }
                 if (characteristic.uuid == COMMAND_UUID) {
                     val message = value.toString(Charsets.UTF_8)
                     if (message == "PING") {
