@@ -2,34 +2,38 @@
 
 ## Components
 
-1. **Android companion** — future phone-side component. Android's call-management APIs are permission- and role-sensitive. The app must clearly explain any role or permission request before asking the user to approve it.
-2. **Windows desktop app** — future user interface for connection status and call prompts.
-3. **Bluetooth transport** — a local protocol for pairing, authenticating, exchanging capability/status messages, and sending user-approved commands.
+1. **Windows desktop assistant** — preserves the original full-screen navy-and-blue assistant and adds a phone connection strip, call popup, outgoing dial panel and trusted-contact manager.
+2. **Android companion** — registers an Android `InCallService` when the user grants the default-phone-app role. A foreground connected-device service keeps the BLE phone link available while the app is backgrounded.
+3. **Bluetooth LE transport** — a GATT service carries JSON call commands from Windows to Android and fragmented JSON state notifications from Android to Windows. It carries no live voice audio.
 
-## Required call policy
+## Call policy
 
-| Event | Required behavior |
+| Event | Behavior |
 | --- | --- |
-| Incoming call | Always show a prompt. Never auto-answer. |
-| User taps Decline | Decline only after an explicit action. |
-| User taps Answer | Answer only after an explicit action and only if Android grants the required capability. |
-| Outgoing call to allowlisted contact | May skip the extra Geronimo confirmation, but only after the user initiates it. |
-| Outgoing call to other contact | Ask for confirmation before placing it. |
-| Lost or untrusted connection | Disable remote call controls. |
+| Incoming call | Show a call prompt. Never auto-answer. |
+| Answer | Only after a deliberate user action on the phone or Windows popup. |
+| Decline | Only after a deliberate user action. |
+| Hang up | Only after a deliberate user action. |
+| Outgoing number in phone-side allowlist | May call directly only if Android's CALL_PHONE permission is also granted. |
+| Other outgoing number | Open Android's dialer so the user confirms and places the call. |
+| Lost connection | Windows cannot send further call commands; reconnect before controls are used. |
 
-The outgoing allowlist and incoming-call approval are separate policies. A contact being allowlisted must never cause an incoming call to be answered automatically.
+The allowlist is stored locally on Android, synced from the user's Windows contact manager, and applies only to outgoing calls. It cannot change incoming-call behavior.
 
-## Milestones
+## Current state
 
-- [x] Create repository structure and project documentation.
-- [x] Add a testable call-approval policy to the Windows package.
-- [x] Add initial Windows and Android app shells.
-- [ ] Implement and test authenticated Bluetooth messaging.
-- [ ] Implement Android call-state integration with the required Android role/permissions.
-- [ ] Implement Windows call prompt and user-triggered controls.
-- [ ] Verify whether a supported hands-free audio route can be established for this exact PC/phone combination.
-- [ ] Add end-to-end tests and device setup instructions.
+- [x] Preserve the supplied original desktop assistant source and design.
+- [x] Add Windows phone connection UI and call popup.
+- [x] Implement bidirectional BLE GATT commands and notifications.
+- [x] Add Android call-state integration and caller-name lookup (permission-gated).
+- [x] Add Android foreground BLE phone-link service.
+- [x] Add phone-side trusted outgoing-number list.
+- [x] Add custom incoming/outgoing MP3 ringtones.
+- [x] Configure GitHub Actions for Android APK and Windows executable builds.
+- [ ] Test the full phone/PC call flow on the actual devices.
+- [ ] Verify call controls, background reconnects and call events on the user's Android version.
+- [ ] Establish a supported phone-to-PC two-way hands-free audio route.
 
 ## Audio limitation
 
-Bluetooth pairing, A2DP media playback, and Hands-Free Profile (HFP) cellular-call routing are different capabilities. The existence of a paired device or an audio device node is not proof that the PC can act as the phone's hands-free endpoint. Do not report call audio as supported until an actual two-way test succeeds.
+BLE pairing and notification delivery are not a voice channel. Windows 10's built-in Bluetooth HFP role is not the required phone-facing hands-free endpoint for routing cellular audio to the laptop. Call audio remains unavailable in this build.
