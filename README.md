@@ -16,7 +16,7 @@ Ollama and the Vosk speech model are separate free downloads; neither is bundled
 
 ## Phone companion features
 
-- Local Bluetooth LE connection with call-state notifications in both directions.
+- Bluetooth LE call-state notifications in both directions; the phone rejects unpaired PC connections.
 - Incoming call popup on Windows, with manual Answer and Decline.
 - Hang up, mute, and speaker commands.
 - Outgoing dialing from Windows; unknown numbers open the Android dialer for manual confirmation.
@@ -29,7 +29,7 @@ Ollama and the Vosk speech model are separate free downloads; neither is bundled
 
 ## Audio limitation
 
-The BLE channel transfers call metadata and commands, not voice. The Windows 10 Bluetooth stack used by this project does not provide the phone-to-PC Hands-Free Profile endpoint required for cellular call audio through the laptop speakers and microphone. Two-way PC call audio is therefore not included or verified.
+The BLE channel transfers call metadata and commands, not voice. Microsoft's documented Windows Bluetooth accessory model makes the PC the Hands-Free Profile Audio Gateway, while an accessory such as a headset is the Hands-Free unit. That built-in configuration is not the phone-facing Hands-Free endpoint needed for laptop call audio, so two-way PC call audio is not included or verified.【turn484453search0】
 
 ## Build status
 
@@ -49,4 +49,4 @@ Android Studio: open `android-companion/`, sync Gradle, and use JDK 17 / Android
 
 ## Privacy
 
-Call details and trusted numbers remain on the phone/PC and are transferred only over the local paired BLE connection. The contacts permission is optional. Do not commit phone numbers, contacts, call logs, credentials, or pairing secrets.
+Call details and trusted numbers remain on the phone/PC and are transferred only over the local paired BLE connection. Contact permission is optional. Do not commit phone numbers, contacts, call logs, credentials, or pairing secrets.
