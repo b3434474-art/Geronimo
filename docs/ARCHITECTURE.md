@@ -37,4 +37,4 @@ The allowlist is stored locally on Android, synced from the user's Windows conta
 
 ## Audio limitation
 
-BLE pairing and notification delivery are not a voice channel. Microsoft's Windows accessory guidance describes the PC as the Audio Gateway (AG) for a Bluetooth headset-type accessory while the accessory acts as the Hands-Free unit (HF). That is not the phone-facing HF role this cellular-audio route requires.【turn484453search0】
+BLE pairing and notification delivery are not a voice channel. Microsoft's Windows accessory guidance describes the PC as the Audio Gateway (AG) for a Bluetooth headset-type accessory while the accessory acts as the Hands-Free unit (HF). That is not the phone-facing HF role this cellular-audio route requires.[Microsoft Bluetooth accessory guidance](https://learn.microsoft.com/en-us/windows-hardware/design/accessory-guidelines/bluetooth-accessory-guidelines/bluetooth-accessory-guidelines-classic-audio)
