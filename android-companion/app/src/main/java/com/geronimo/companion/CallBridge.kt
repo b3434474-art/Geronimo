@@ -32,6 +32,7 @@ object CallBridge {
                 "MUTE" -> GeronimoInCallService.setMutedFromUi(command.optBoolean("enabled", false))
                 "SPEAKER" -> GeronimoInCallService.setSpeakerFromUi(command.optBoolean("enabled", false))
                 "SET_CALL_ENDPOINT" -> GeronimoInCallService.requestCallEndpointFromUi(command.optString("identifier"))
+                "REFRESH_CALL_STATE" -> GeronimoInCallService.refreshCallStateFromUi()
                 "ALLOWLIST_ADD" -> {
                     val number = command.optString("number")
                     val name = command.optString("name")
