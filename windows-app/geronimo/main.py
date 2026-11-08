@@ -17,6 +17,7 @@ if not _SOURCE.exists() and _PAYLOAD.exists():
     _SOURCE.write_bytes(lzma.decompress(base64.b64decode(_PAYLOAD.read_bytes())))
 
 from geronimo.original_assistant import GeronimoApp as OriginalGeronimoApp
+from geronimo.ringer import CallRinger
 
 
 class GeronimoApp(OriginalGeronimoApp):
@@ -29,6 +30,12 @@ class GeronimoApp(OriginalGeronimoApp):
         self.call_popup = None
         self.muted = False
         self.speaker = False
+        self.call_ringer = CallRinger()
+        self.audio_endpoints: list[dict] = []
+        self.current_audio_endpoint_id = ""
+        self.audio_route_picker = None
+        self.audio_route_var = None
+        self.audio_route_options: dict[str, str] = {}
         self.contacts_path = Path(os.environ.get("APPDATA", str(Path.home()))) / "Geronimo" / "phone_contacts.json"
         self.contacts = self._load_contacts()
         super().__init__(root)
@@ -60,7 +67,15 @@ class GeronimoApp(OriginalGeronimoApp):
     def _load_contacts(self):
         try:
             data = json.loads(self.contacts_path.read_text(encoding="utf-8"))
-            return data if isinstance(data, list) else []
+            if not isinstance(data, list):
+                return []
+            return [
+                {"name": str(item.get("name", "")).strip()[:60],
+                 "number": "".join(ch for ch in str(item.get("number", "")) if ch.isdigit() or ch in "+*#")}
+                for item in data
+                if isinstance(item, dict)
+                and len("".join(ch for ch in str(item.get("number", "")) if ch.isdigit() or ch in "+*#")) >= 3
+            ]
         except Exception:
             return []
 
@@ -72,6 +87,7 @@ class GeronimoApp(OriginalGeronimoApp):
         if self.phone_bridge is not None:
             self.phone_bridge.stop()
             self.phone_bridge = None
+            self.call_ringer.stop()
             self.phone_status.set("PHONE DISCONNECTED")
             return
         try:
@@ -83,14 +99,20 @@ class GeronimoApp(OriginalGeronimoApp):
             messagebox.showerror("Phone connection unavailable", f"Check the connection setup and app requirements.\n\n{exc}", parent=self.root)
 
     def _on_phone_status(self, message: str):
-        self.root.after(0, lambda: self.phone_status.set(message.upper()[:100]))
+        try:
+            self.root.after(0, lambda: self.phone_status.set(message.upper()[:100]))
+        except tk.TclError:
+            pass
 
     def _on_phone_event(self, event: dict):
-        self.root.after(0, lambda payload=event: self._apply_phone_event(payload))
+        try:
+            self.root.after(0, lambda payload=event: self._apply_phone_event(payload))
+        except tk.TclError:
+            pass
 
     def _apply_phone_event(self, event: dict):
         kind = str(event.get("event", "")).upper()
-        if kind in ("CALL_RINGING", "CALL_DIALING", "CALL_ACTIVE"):
+        if kind in ("CALL_RINGING", "CALL_DIALING", "CALL_ACTIVE", "CALL_HOLDING"):
             self.current_call = {
                 "state": kind,
                 "number": str(event.get("number", "Unknown number")),
@@ -98,9 +120,23 @@ class GeronimoApp(OriginalGeronimoApp):
             }
             title = self.current_call["name"] or self.current_call["number"]
             self.phone_status.set(f"{kind.replace('CALL_', '')} · {title}".upper()[:100])
-            self._show_call_popup()
             if kind == "CALL_RINGING":
-                self._speak(f"Incoming call from {title}. Please answer or decline.")
+                if not self.call_ringer.start():
+                    self.phone_status.set(f"INCOMING CALL · {title} · WINDOWS RINGTONE UNAVAILABLE".upper()[:100])
+            else:
+                self.call_ringer.stop()
+            self._show_call_popup()
+        elif kind == "CALL_AUDIO_ENDPOINTS":
+            endpoints = event.get("available", [])
+            self.audio_endpoints = [
+                item for item in endpoints
+                if isinstance(item, dict) and str(item.get("id", "")).strip()
+            ] if isinstance(endpoints, list) else []
+            self.current_audio_endpoint_id = str(event.get("currentId", ""))
+            self._refresh_audio_route_picker()
+        elif kind == "CALL_AUDIO_ROUTE_RESULT":
+            message = str(event.get("message", "Audio route update received."))
+            self.phone_status.set(message.upper()[:100])
         elif kind == "CALL_DIAL_REQUESTED":
             self.phone_status.set(
                 "TRUSTED NUMBER: STARTING CALL ON PHONE"
@@ -108,12 +144,14 @@ class GeronimoApp(OriginalGeronimoApp):
                 else "PHONE DIALER OPENED · CONFIRM THE CALL ON PHONE"
             )
         elif kind == "CALL_ENDED":
+            self.call_ringer.stop()
             self.current_call = {"state": "IDLE", "number": "", "name": ""}
             self.phone_status.set("CALL ENDED · PHONE LINK READY")
             if self.call_popup and self.call_popup.winfo_exists():
                 self.call_popup.destroy()
                 self.call_popup = None
         elif kind == "CALL_ERROR":
+            self.call_ringer.stop()
             messagebox.showerror("Phone call", str(event.get("message", "The phone reported an error.")), parent=self.root)
         elif kind == "PHONE_READY":
             transport = str(event.get("transport", "BLUETOOTH")).upper()
@@ -192,15 +230,73 @@ class GeronimoApp(OriginalGeronimoApp):
                       relief="flat", padx=12, pady=8).pack(side="left", padx=(0, 8))
         refresh()
 
+    def _refresh_audio_route_picker(self):
+        picker = self.audio_route_picker
+        variable = self.audio_route_var
+        if picker is None or variable is None:
+            return
+        options: dict[str, str] = {}
+        for endpoint in self.audio_endpoints:
+            identifier = str(endpoint.get("id", "")).strip()
+            if not identifier:
+                continue
+            endpoint_type = str(endpoint.get("typeName", "AUDIO")).replace("_", " ")
+            endpoint_name = str(endpoint.get("name", "Audio device")).strip()
+            label = f"{endpoint_type} · {endpoint_name}"
+            options[label] = identifier
+        self.audio_route_options = options
+        labels = list(options)
+        try:
+            picker.configure(values=labels)
+            current_label = next(
+                (label for label, identifier in options.items()
+                 if identifier == self.current_audio_endpoint_id),
+                None,
+            )
+            if current_label:
+                variable.set(current_label)
+            elif labels and variable.get() not in options:
+                variable.set(labels[0])
+            elif not labels:
+                variable.set("No Android audio routes reported yet")
+        except tk.TclError:
+            self.audio_route_picker = None
+            self.audio_route_var = None
+
+    def _apply_selected_audio_route(self):
+        if self.audio_route_var is None:
+            return
+        identifier = self.audio_route_options.get(self.audio_route_var.get())
+        if not identifier:
+            messagebox.showinfo(
+                "Call audio output",
+                "Start or answer a call first so Android can report its available call-audio devices.",
+                parent=self.root,
+            )
+            return
+        self._send_phone_command({"command": "SET_CALL_ENDPOINT", "identifier": identifier})
+
     def phone_call_panel(self):
         win = tk.Toplevel(self.root)
         win.title("Geronimo · Phone controls")
         win.configure(bg="#071426")
-        win.geometry("510x390")
+        win.geometry("510x500")
         tk.Label(win, text="PHONE COMPANION", bg="#071426", fg="#58A9FF",
                  font=("Segoe UI", 12, "bold")).pack(anchor="w", padx=18, pady=(16, 4))
         tk.Label(win, text="USB is preferred when connected; Bluetooth is the fallback. Incoming calls still require you to press Answer.",
-                 bg="#071426", fg="#9DB5D0", wraplength=470, justify="left").pack(anchor="w", padx=18, pady=(0, 10))
+                 bg="#071426", fg="#9DB5D0", wraplength=470, justify="left").pack(anchor="w", padx=18, pady=(0, 8))
+        tk.Label(win, text="CALL AUDIO OUTPUT (DEVICES REPORTED BY ANDROID)",
+                 bg="#071426", fg="#58A9FF", font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=18, pady=(2, 3))
+        self.audio_route_var = tk.StringVar()
+        self.audio_route_picker = ttk.Combobox(
+            win, textvariable=self.audio_route_var, values=[], state="readonly"
+        )
+        self.audio_route_picker.pack(fill="x", padx=18, pady=3)
+        tk.Button(win, text="Use selected audio device", command=self._apply_selected_audio_route,
+                  bg="#243A55", fg="#EAF4FF", relief="flat", padx=12, pady=7).pack(anchor="w", padx=18, pady=(3, 5))
+        tk.Label(win, text="This changes the call audio route on the phone. Laptop speakers work only if Android lists the laptop as a compatible call-audio device.",
+                 bg="#071426", fg="#9DB5D0", wraplength=470, justify="left").pack(anchor="w", padx=18, pady=(0, 8))
+        self._refresh_audio_route_picker()
         number = tk.StringVar()
         tk.Entry(win, textvariable=number, bg="#10233D", fg="#EAF4FF", insertbackground="#EAF4FF",
                  relief="flat", font=("Segoe UI", 14)).pack(fill="x", padx=18, pady=5)
@@ -289,6 +385,7 @@ class GeronimoApp(OriginalGeronimoApp):
         win.attributes("-topmost", True)
 
     def shutdown(self):
+        self.call_ringer.stop()
         if self.phone_bridge is not None:
             try:
                 self.phone_bridge.stop()
