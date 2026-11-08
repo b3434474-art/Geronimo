@@ -61,6 +61,8 @@ jobs:
       - name: Check Python syntax
         run: python -m compileall -q windows-app/geronimo
       - name: Run Windows helper unit tests
+        env:
+          PYTHONPATH: windows-app
         run: python -m unittest discover -s windows-app/tests -v
       - name: Build Windows executable
         run: |
