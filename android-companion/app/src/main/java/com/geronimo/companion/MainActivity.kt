@@ -3,7 +3,6 @@ package com.geronimo.companion
 import android.Manifest
 import android.app.Activity
 import android.app.role.RoleManager
-import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -71,17 +70,20 @@ class MainActivity : Activity() {
             textSize = 14f; setPadding(0, 16, 0, 0)
         })
         content.addView(TextView(this).apply {
-            text = "USB uses an authorized ADB connection for call controls and caller updates. Bluetooth remains available as a fallback. Call audio is still handled by the phone."
+            text = "USB carries call controls and caller updates without requiring Bluetooth permissions. Android can share call audio only through a compatible audio endpoint shown in the call-audio list; the app cannot directly capture cellular-call audio."
             textSize = 14f; setPadding(0, 20, 0, 0)
         })
         setContentView(content)
 
         requestNotificationPermissionIfNeeded()
-        if (hasBluetoothPermissions()) startBridge()
-        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasBluetoothPermissions()) {
+            // USB should still start even when the user declines the optional Bluetooth fallback.
+            startBridge()
             ActivityCompat.requestPermissions(this,
                 arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_CONNECT), 41)
-        } else startBridge()
+        } else {
+            startBridge()
+        }
     }
 
     private fun requestDialerRole() {
@@ -115,13 +117,9 @@ class MainActivity : Activity() {
              ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED)
 
     private fun startBridge() {
-        if (!hasBluetoothPermissions()) {
-            statusView.text = "Allow Nearby devices so Bluetooth fallback can be used. USB will still be available once the connection service starts."
-            return
-        }
         try {
             ContextCompat.startForegroundService(this, Intent(this, GeronimoConnectionService::class.java))
-            statusView.text = "Phone link started. USB is ready when you connect the cable and approve this PC; Bluetooth is the fallback."
+            statusView.text = "Phone link started. USB works over an authorized cable; Bluetooth is the optional fallback."
         } catch (error: Exception) {
             statusView.text = "Could not start the phone connection service: ${error.message}"
         }
@@ -130,8 +128,13 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
-            41 -> if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) startBridge()
-                  else statusView.text = "Allow Nearby devices to start the connection service; USB requires the same service to be running."
+            41 -> if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                startService(Intent(this, GeronimoConnectionService::class.java)
+                    .setAction(GeronimoConnectionService.ACTION_RESTART_BLUETOOTH))
+                statusView.text = "Bluetooth fallback enabled. USB remains available."
+            } else {
+                statusView.text = "Bluetooth fallback not enabled. USB connection is still available."
+            }
             43 -> statusView.text = if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) "Call notifications enabled." else "Notifications are disabled in Android settings."
             44 -> statusView.text = if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) "Caller names from contacts enabled." else "Caller names will only come from caller ID or the Geronimo allowlist."
             45 -> statusView.text = if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) "Trusted contacts can use direct dialing." else "Trusted calls will open the phone dialer for manual confirmation."
