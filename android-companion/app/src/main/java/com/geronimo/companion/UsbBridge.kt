@@ -72,6 +72,7 @@ object UsbBridge {
                         try {
                             val reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
                             publish(JSONObject().put("event", "PHONE_READY").put("transport", "USB"))
+                            CallBridge.refreshCallStateFromUi()
                             while (running.get()) {
                                 val line = reader.readLine() ?: break
                                 if (line.length > 4096) continue
