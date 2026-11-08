@@ -60,6 +60,8 @@ jobs:
           python -c "import base64,lzma; from pathlib import Path; p=Path('windows-app/geronimo'); (p/'original_assistant.py').write_bytes(lzma.decompress(base64.b64decode((p/'original_assistant.py.xz.b64').read_bytes())))"
       - name: Check Python syntax
         run: python -m compileall -q windows-app/geronimo
+      - name: Run Windows helper unit tests
+        run: python -m unittest discover -s windows-app/tests -v
       - name: Build Windows executable
         run: |
           pyinstaller --noconfirm --clean --onefile --windowed --name Geronimo --paths windows-app --hidden-import geronimo.bridge --hidden-import geronimo.original_assistant --hidden-import vosk --hidden-import sounddevice --hidden-import pyttsx3 --collect-all bleak --collect-all cv2 --collect-all vosk --collect-all pyttsx3 --collect-all sounddevice --collect-all comtypes windows-app/geronimo/main.py
