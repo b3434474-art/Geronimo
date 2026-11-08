@@ -5,14 +5,26 @@
 Geronimo supports two local transports for call controls and status events:
 
 - **USB:** Windows uses Android Debug Bridge (ADB) port forwarding to connect to a loopback-only TCP server in the Android companion. USB is preferred when an authorized device is detected.
-- **Bluetooth LE:** retained as an automatic fallback when USB is unavailable. The BLE connection must be paired/bonded in the device settings.
+- **Bluetooth LE:** retained as an optional fallback when USB is unavailable. The BLE connection must be paired/bonded in the device settings.
 
-Both transports can carry dial, answer, reject, hang-up, mute, speaker, trusted-contact sync, and caller/call-state messages. Incoming calls still require a manual answer action.
+Both transports carry dial, answer, reject, hang-up, mute, speaker, trusted-contact sync, caller/call-state messages, and reported audio-endpoint metadata. Neither transports live cellular call audio. Incoming calls require a manual answer action.
 
-## Cellular call audio
+## Windows incoming ringtone
 
-Neither the USB ADB bridge nor the BLE bridge carries live cellular-call audio. Android's documented audio-input sharing rules say a normal third-party app cannot capture cellular-call audio; call capture requires an accessibility service or a privileged preinstalled app with the protected `CAPTURE_AUDIO_OUTPUT` permission. See the [Android audio input sharing documentation](https://developer.android.com/media/platform/sharing-audio-input).
+When Android reports `CALL_RINGING`, the Windows companion plays a small, original two-tone WAV ringtone locally using the Windows sound API. It repeats until the call is answered, moves into another state, ends, the PC disconnects the phone link, or Geronimo shuts down. No internet or extra audio package is needed for this feature.
 
-The Android `InCallService` API allows a default dialer to request supported call audio endpoints (for example, earpiece, speaker, Bluetooth, or a wired headset), but it does not grant ordinary apps raw access to the cellular call's microphone and speaker streams. See the [Android InCallService API](https://developer.android.com/reference/android/telecom/InCallService).
+## Android call audio endpoint routing
 
-Therefore, the supported Geronimo build keeps actual call audio on the phone's currently selected audio route. The Windows microphone and speakers are not presented as a working cellular headset. This is an Android platform restriction, not a missing USB cable feature.
+On Android 14 or newer, Geronimo listens for Telecom's available call-audio endpoints and sends their exact identifiers and names to the Windows Calls panel. The panel can ask Android to switch to one of those currently available endpoints. The app does not fabricate endpoints: it only requests an endpoint supplied by Android.
+
+This can route a call to a device that Android already recognizes as a supported call endpoint. It cannot turn a Windows PC into a Bluetooth hands-free endpoint, and it does not copy cellular voice into the Geronimo app.
+
+## Why laptop caller audio is not guaranteed
+
+Android's documented audio-input sharing rules say a normal third-party app cannot capture cellular-call audio; call capture requires system/privileged capabilities. See [Android audio input sharing](https://developer.android.com/media/platform/sharing-audio-input).
+
+The Android `InCallService` API allows a default dialer to request supported call audio endpoints; it does not expose raw cellular-call microphone and speaker streams to ordinary apps. See [Android InCallService](https://developer.android.com/reference/android/telecom/InCallService).
+
+Bluetooth role direction matters too: Microsoft's Windows Bluetooth accessory documentation describes the PC as the Hands-Free Profile Audio Gateway and an accessory such as a headset as the Hands-Free unit. That standard Windows PC role is not automatically the phone-facing headset role required for the phone to route a call to the laptop. See [Microsoft Bluetooth accessory guidance](https://learn.microsoft.com/en-us/windows-hardware/design/accessory-guidelines/bluetooth-accessory-guidelines/bluetooth-accessory-guidelines-classic-audio).
+
+Therefore, the supported Geronimo feature now rings the Windows laptop and exposes Android's real route choices. Caller voice through laptop speakers remains conditional on Android listing the laptop as a compatible endpoint and must be verified on the actual phone and PC.
