@@ -9,7 +9,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 
-/** Keeps the BLE phone link available while Geronimo runs in the background. */
+/** Keeps the USB and BLE phone links available while Geronimo runs in the background. */
 class GeronimoConnectionService : Service() {
     companion object {
         private const val CHANNEL_ID = "geronimo_connection"
@@ -22,7 +22,10 @@ class GeronimoConnectionService : Service() {
         super.onCreate()
         AppContext.application = applicationContext
         createChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("Starting Bluetooth connection…"))
+        startForeground(NOTIFICATION_ID, buildNotification("Starting USB and Bluetooth links…"))
+        UsbBridge.start(applicationContext) { message ->
+            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(message))
+        }
         bridge = BluetoothBridge(applicationContext) { message ->
             getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(message))
         }
@@ -55,6 +58,7 @@ class GeronimoConnectionService : Service() {
             .build()
 
     override fun onDestroy() {
+        UsbBridge.stop()
         bridge?.stop()
         bridge = null
         super.onDestroy()
