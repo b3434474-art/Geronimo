@@ -1,5 +1,6 @@
 package com.geronimo.companion
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -13,8 +14,10 @@ import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.ParcelUuid
+import androidx.core.content.ContextCompat
 import java.util.UUID
 import java.util.concurrent.Executors
 import org.json.JSONObject
@@ -49,14 +52,22 @@ class BluetoothBridge(
     fun start() {
         activeBridge = this
         AppContext.application = appContext
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val hasConnect = ContextCompat.checkSelfPermission(appContext, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+            val hasAdvertise = ContextCompat.checkSelfPermission(appContext, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED
+            if (!hasConnect || !hasAdvertise) {
+                onStatus("USB ready · Bluetooth permissions not granted")
+                return
+            }
+        }
         val adapter = manager.adapter
         if (adapter == null || !adapter.isEnabled) {
-            onStatus("Bluetooth is off")
+            onStatus("USB ready · Bluetooth is off")
             return
         }
         val advertiser = adapter.bluetoothLeAdvertiser
         if (advertiser == null) {
-            onStatus("BLE advertising is not supported")
+            onStatus("USB ready · BLE advertising is not supported")
             return
         }
 
@@ -108,6 +119,10 @@ class BluetoothBridge(
 
             override fun onConnectionStateChange(device: BluetoothDevice, statusCode: Int, newState: Int) {
                 if (newState == BluetoothGatt.STATE_CONNECTED) {
+                    if (statusCode != BluetoothGatt.GATT_SUCCESS) {
+                        onStatus("Bluetooth connection failed (code $statusCode)")
+                        return
+                    }
                     if (device.bondState != BluetoothDevice.BOND_BONDED) {
                         gattServer?.cancelConnection(device)
                         onStatus("Bluetooth pairing required: pair this PC and phone in system settings first")
@@ -206,7 +221,7 @@ class BluetoothBridge(
         })
 
         if (gattServer == null) {
-            onStatus("Could not open BLE GATT server")
+            onStatus("USB ready · could not open BLE GATT server")
             return
         }
         gattServer?.addService(service)
@@ -259,6 +274,7 @@ class BluetoothBridge(
         notificationsEnabled = false
         gattServer?.close()
         gattServer = null
+        sendExecutor.shutdownNow()
         if (activeBridge === this) activeBridge = null
     }
 }
