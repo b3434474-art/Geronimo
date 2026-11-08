@@ -1,6 +1,6 @@
 # Geronimo Windows companion
 
-This is the original Geronimo assistant UI with an added phone-control strip.
+This is the original Geronimo assistant UI with an added phone-control strip. The original navy-and-blue full-screen assistant and pulsing orb remain intact.
 
 ## Phone connection
 
@@ -10,11 +10,13 @@ This is the original Geronimo assistant UI with an added phone-control strip.
 
 ## Calls
 
-The phone app must be installed and selected as the default phone app for Android to deliver InCallService call events. Incoming calls are never auto-answered. They require a manual Answer action on the phone or the Windows call popup. Outgoing numbers not on the phone-side trusted list open the Android dialer for confirmation.
+The phone app must be installed and selected as the default phone app for Android to deliver InCallService call events. Incoming calls are never auto-answered. They require a manual Answer action on the phone or the Windows call popup.
 
-## Audio limitation
+For an incoming call, Windows displays the caller and plays a generated repeating ringtone locally. It stops when the call is answered, moves to another state, ends, the phone link is disconnected, or Geronimo closes.
 
-The laptop microphone and speakers cannot be used as the cellular-call headset through this companion. Android restricts cellular call-audio capture by ordinary third-party apps; the supported InCallService interface provides call controls and audio-route selection, not raw call audio. Call audio stays on the phone's selected audio route.
+## Call audio output
+
+The Calls panel displays the endpoints reported by Android during a call and can ask Android Telecom to change the phone's active route (Android 14+). The Windows PC's speakers will play the caller only if Android lists that PC as a supported call-audio endpoint. The route selector cannot create a missing Bluetooth hands-free endpoint or stream audio over the Geronimo control link.
 
 ## Original assistant
 
