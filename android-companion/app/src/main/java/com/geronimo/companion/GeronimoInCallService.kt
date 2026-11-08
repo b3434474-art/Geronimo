@@ -86,6 +86,10 @@ class GeronimoInCallService : InCallService() {
                 service.requestCallEndpoint(identifier)
             }
         }
+
+        fun refreshCallStateFromUi() {
+            serviceInstance?.publishCurrentCallSnapshot()
+        }
     }
 
     private val callbacks = ConcurrentHashMap<Call, Call.Callback>()
@@ -165,6 +169,14 @@ class GeronimoInCallService : InCallService() {
     }
 
     private fun publishCallState(call: Call, state: Int) {
+        if (state == Call.STATE_DISCONNECTING) {
+            stopRingtone()
+            if (activeCall === call) {
+                CallBridge.send(JSONObject().put("event", "CALL_ENDING"))
+            }
+            return
+        }
+
         if (state == Call.STATE_DISCONNECTED) {
             stopRingtone()
             if (activeCall === call) {
@@ -211,6 +223,24 @@ class GeronimoInCallService : InCallService() {
                 CallBridge.send(JSONObject().put("event", "CALL_HOLDING").put("number", number).put("name", name))
             }
         }
+    }
+
+    /** Re-send the existing call state when a transport reconnects. */
+    private fun publishCurrentCallSnapshot() {
+        val call = activeCall ?: return
+        val number = call.details.handle?.schemeSpecificPart ?: "Unknown number"
+        val name = resolveCallerName(call, number)
+        activeCallerName = name
+        val event = when (call.state) {
+            Call.STATE_RINGING -> "CALL_RINGING"
+            Call.STATE_DIALING, Call.STATE_CONNECTING -> "CALL_DIALING"
+            Call.STATE_ACTIVE -> "CALL_ACTIVE"
+            Call.STATE_HOLDING -> "CALL_HOLDING"
+            Call.STATE_DISCONNECTING -> "CALL_ENDING"
+            else -> return
+        }
+        CallBridge.send(JSONObject().put("event", event).put("number", number).put("name", name))
+        sendCallAudioEndpoints()
     }
 
     private fun resolveCallerName(call: Call, number: String): String {
