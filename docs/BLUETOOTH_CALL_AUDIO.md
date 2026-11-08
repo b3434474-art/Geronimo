@@ -1,25 +1,18 @@
-# Bluetooth and cellular-call audio
+# Geronimo call transport and audio
 
-## Current implementation
+## Phone connection transports
 
-Geronimo uses BLE GATT for small call-control and call-state messages:
+Geronimo supports two local transports for call controls and status events:
 
-- Windows to Android: dial, answer, decline, hang up, mute and speaker commands.
-- Android to Windows: phone-ready, incoming/ringing, dialing, active, ended and error events, including caller number/name when available.
+- **USB:** Windows uses Android Debug Bridge (ADB) port forwarding to connect to a loopback-only TCP server in the Android companion. USB is preferred when an authorized device is detected.
+- **Bluetooth LE:** retained as an automatic fallback when USB is unavailable. The BLE connection must be paired/bonded in the device settings.
 
-The phone accepts call commands only from a Bluetooth-bonded PC. BLE notifications are not used for call voice audio.
+Both transports can carry dial, answer, reject, hang-up, mute, speaker, trusted-contact sync, and caller/call-state messages. Incoming calls still require a manual answer action.
 
-## Why laptop call audio is not included
+## Cellular call audio
 
-Microsoft's Windows Bluetooth accessory guidance describes the PC as the Audio Gateway (AG) and a headset-style accessory as the Hands-Free unit (HF). HFP uses the HF unit as the remote microphone/speaker for the AG.[Microsoft Bluetooth accessory guidance](https://learn.microsoft.com/en-us/windows-hardware/design/accessory-guidelines/bluetooth-accessory-guidelines/bluetooth-accessory-guidelines-classic-audio)[Microsoft Bluetooth terminology](https://learn.microsoft.com/en-us/windows-hardware/design/accessory-guidelines/bluetooth-accessory-guidelines/bluetooth-accessory-guidelines-terminology) This documented Windows accessory arrangement does not provide the phone-facing HF endpoint required to route the phone's cellular call audio through the laptop.
+Neither the USB ADB bridge nor the BLE bridge carries live cellular-call audio. Android's documented audio-input sharing rules say a normal third-party app cannot capture cellular-call audio; call capture requires an accessibility service or a privileged preinstalled app with the protected `CAPTURE_AUDIO_OUTPUT` permission. See the [Android audio input sharing documentation](https://developer.android.com/media/platform/sharing-audio-input).
 
-## Acceptance test for any future audio route
+The Android `InCallService` API allows a default dialer to request supported call audio endpoints (for example, earpiece, speaker, Bluetooth, or a wired headset), but it does not grant ordinary apps raw access to the cellular call's microphone and speaker streams. See the [Android InCallService API](https://developer.android.com/reference/android/telecom/InCallService).
 
-Do not mark call audio as supported until a real test on the target hardware demonstrates:
-
-- Remote caller audio plays through the PC speakers.
-- The PC microphone is transmitted to the call.
-- The route remains stable for incoming and outgoing calls, screen-off and reconnects.
-- Call controls work and incoming calls still always require explicit approval.
-
-Until these tests pass, show call-audio support as unavailable / not verified.
+Therefore, the supported Geronimo build keeps actual call audio on the phone's currently selected audio route. The Windows microphone and speakers are not presented as a working cellular headset. This is an Android platform restriction, not a missing USB cable feature.
