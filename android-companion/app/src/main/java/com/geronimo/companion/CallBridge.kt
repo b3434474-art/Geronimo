@@ -7,11 +7,14 @@ import android.telecom.VideoProfile
 import android.util.Log
 import org.json.JSONObject
 
-/** Maps trusted local BLE commands onto Android Telecom actions. */
+/** Maps trusted local USB/BLE commands onto Android Telecom actions. */
 object CallBridge {
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    fun send(message: JSONObject) { BluetoothBridge.publish(message) }
+    fun send(message: JSONObject) {
+        BluetoothBridge.publish(message)
+        UsbBridge.publish(message)
+    }
 
     fun handleCommand(command: JSONObject) {
         mainHandler.post {
