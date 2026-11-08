@@ -166,7 +166,7 @@ class BluetoothBridge(
                     notificationsEnabled = enabled
                     descriptor.value = value
                     if (responseNeeded) gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
-                    if (enabled) publishInternal(JSONObject().put("event", "PHONE_READY"))
+                    if (enabled) publishInternal(JSONObject().put("event", "PHONE_READY").put("transport", "BLUETOOTH"))
                 } else if (responseNeeded) {
                     gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_WRITE_NOT_PERMITTED, offset, null)
                 }
