@@ -181,7 +181,10 @@ class BluetoothBridge(
                     notificationsEnabled = enabled
                     descriptor.value = value
                     if (responseNeeded) gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
-                    if (enabled) publishInternal(JSONObject().put("event", "PHONE_READY").put("transport", "BLUETOOTH"))
+                    if (enabled) {
+                        publishInternal(JSONObject().put("event", "PHONE_READY").put("transport", "BLUETOOTH"))
+                        CallBridge.refreshCallStateFromUi()
+                    }
                 } else if (responseNeeded) {
                     gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_WRITE_NOT_PERMITTED, offset, null)
                 }
@@ -243,8 +246,9 @@ class BluetoothBridge(
             val to = minOf(from + chunkSize, payload.size)
             byteArrayOf(0x47, messageId.toByte(), index.toByte(), total.toByte()) + payload.copyOfRange(from, to)
         }
-        sendExecutor.execute {
-            frames.forEach { frame ->
+        try {
+            sendExecutor.execute {
+                frames.forEach { frame ->
                 try {
                     val server = gattServer ?: return@execute
                     if (Build.VERSION.SDK_INT >= 33) {
@@ -260,6 +264,8 @@ class BluetoothBridge(
                     return@execute
                 }
             }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            // The bridge may be shutting down while a call-state event is being published.
         }
     }
 
