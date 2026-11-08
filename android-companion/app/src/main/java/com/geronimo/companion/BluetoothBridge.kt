@@ -183,7 +183,7 @@ class BluetoothBridge(
                     if (responseNeeded) gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
                     if (enabled) {
                         publishInternal(JSONObject().put("event", "PHONE_READY").put("transport", "BLUETOOTH"))
-                        CallBridge.refreshCallStateFromUi()
+                        GeronimoInCallService.refreshCallStateFromUi()
                     }
                 } else if (responseNeeded) {
                     gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_WRITE_NOT_PERMITTED, offset, null)
@@ -236,6 +236,7 @@ class BluetoothBridge(
         val payload = message.toString().toByteArray(Charsets.UTF_8)
         characteristic.value = payload
         if (!notificationsEnabled) return
+
         val maxValue = (negotiatedMtu - 3).coerceAtLeast(7)
         val chunkSize = (maxValue - 4).coerceAtLeast(1)
         val total = ((payload.size + chunkSize - 1) / chunkSize).coerceAtLeast(1)
@@ -244,28 +245,34 @@ class BluetoothBridge(
         val frames = (0 until total).map { index ->
             val from = index * chunkSize
             val to = minOf(from + chunkSize, payload.size)
-            byteArrayOf(0x47, messageId.toByte(), index.toByte(), total.toByte()) + payload.copyOfRange(from, to)
+            byteArrayOf(0x47, messageId.toByte(), index.toByte(), total.toByte()) +
+                payload.copyOfRange(from, to)
         }
+
         try {
             sendExecutor.execute {
-                frames.forEach { frame ->
-                try {
-                    val server = gattServer ?: return@execute
-                    if (Build.VERSION.SDK_INT >= 33) {
-                        server.notifyCharacteristicChanged(device, characteristic, false, frame)
-                    } else {
-                        characteristic.value = frame
-                        @Suppress("DEPRECATION")
-                        server.notifyCharacteristicChanged(device, characteristic, false)
+                for (frame in frames) {
+                    try {
+                        val server = gattServer ?: return@execute
+                        if (Build.VERSION.SDK_INT >= 33) {
+                            server.notifyCharacteristicChanged(device, characteristic, false, frame)
+                        } else {
+                            characteristic.value = frame
+                            @Suppress("DEPRECATION")
+                            server.notifyCharacteristicChanged(device, characteristic, false)
+                        }
+                        Thread.sleep(18)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return@execute
+                    } catch (_: Exception) {
+                        onStatus("Could not send a phone event to Windows")
+                        return@execute
                     }
-                    Thread.sleep(18)
-                } catch (_: Exception) {
-                    onStatus("Could not send a phone event to Windows")
-                    return@execute
                 }
             }
         } catch (_: java.util.concurrent.RejectedExecutionException) {
-            // The bridge may be shutting down while a call-state event is being published.
+            // The bridge can close while an event is being queued during shutdown.
         }
     }
 
