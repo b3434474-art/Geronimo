@@ -100,9 +100,18 @@ class GeronimoApp(OriginalGeronimoApp):
 
     def _on_phone_status(self, message: str):
         try:
-            self.root.after(0, lambda: self.phone_status.set(message.upper()[:100]))
+            self.root.after(0, lambda text=message: self._apply_phone_status(text))
         except tk.TclError:
             pass
+
+    def _apply_phone_status(self, message: str):
+        self.phone_status.set(message.upper()[:100])
+        upper = message.upper()
+        if any(token in upper for token in (
+            "DISCONNECTED", "LINK INTERRUPTED", "LINK STOPPED",
+            "CONNECTION ISSUE", "PHONE LINK STOPPED",
+        )):
+            self.call_ringer.stop()
 
     def _on_phone_event(self, event: dict):
         try:
@@ -112,7 +121,7 @@ class GeronimoApp(OriginalGeronimoApp):
 
     def _apply_phone_event(self, event: dict):
         kind = str(event.get("event", "")).upper()
-        if kind in ("CALL_RINGING", "CALL_DIALING", "CALL_ACTIVE", "CALL_HOLDING"):
+        if kind in ("CALL_RINGING", "CALL_DIALING", "CALL_ACTIVE", "CALL_HOLDING", "CALL_ENDING"):
             self.current_call = {
                 "state": kind,
                 "number": str(event.get("number", "Unknown number")),
@@ -297,6 +306,7 @@ class GeronimoApp(OriginalGeronimoApp):
         tk.Label(win, text="This changes the call audio route on the phone. Laptop speakers work only if Android lists the laptop as a compatible call-audio device.",
                  bg="#071426", fg="#9DB5D0", wraplength=470, justify="left").pack(anchor="w", padx=18, pady=(0, 8))
         self._refresh_audio_route_picker()
+        self._send_phone_command({"command": "REFRESH_CALL_STATE"}, quiet=True)
         number = tk.StringVar()
         tk.Entry(win, textvariable=number, bg="#10233D", fg="#EAF4FF", insertbackground="#EAF4FF",
                  relief="flat", font=("Segoe UI", 14)).pack(fill="x", padx=18, pady=5)
