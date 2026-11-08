@@ -32,7 +32,7 @@ class MainActivity : Activity() {
             textSize = 30f
             setPadding(0, 0, 0, 20)
         })
-        statusView = TextView(this).apply { text = "Bluetooth setup required"; textSize = 18f }
+        statusView = TextView(this).apply { text = "USB or Bluetooth connection can be started"; textSize = 18f }
         content.addView(statusView)
         content.addView(Button(this).apply {
             text = "Set as default phone app"
@@ -71,7 +71,7 @@ class MainActivity : Activity() {
             textSize = 14f; setPadding(0, 16, 0, 0)
         })
         content.addView(TextView(this).apply {
-            text = "Keep the Bluetooth phone-link notification enabled for Windows call alerts when this screen is in the background. BLE carries call controls and caller details, not live call audio."
+            text = "USB uses an authorized ADB connection for call controls and caller updates. Bluetooth remains available as a fallback. Call audio is still handled by the phone."
             textSize = 14f; setPadding(0, 20, 0, 0)
         })
         setContentView(content)
@@ -81,7 +81,7 @@ class MainActivity : Activity() {
         else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ActivityCompat.requestPermissions(this,
                 arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_CONNECT), 41)
-        }
+        } else startBridge()
     }
 
     private fun requestDialerRole() {
@@ -115,17 +115,15 @@ class MainActivity : Activity() {
              ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED)
 
     private fun startBridge() {
-        if (!BluetoothAdapter.getDefaultAdapter().isEnabled) {
-            statusView.text = "Turn on Bluetooth, then tap Connect to Windows."; return
-        }
         if (!hasBluetoothPermissions()) {
-            statusView.text = "Bluetooth permissions are needed for the local connection."; return
+            statusView.text = "Allow Nearby devices so Bluetooth fallback can be used. USB will still be available once the connection service starts."
+            return
         }
         try {
             ContextCompat.startForegroundService(this, Intent(this, GeronimoConnectionService::class.java))
-            statusView.text = "Geronimo is advertising for the Windows companion."
+            statusView.text = "Phone link started. USB is ready when you connect the cable and approve this PC; Bluetooth is the fallback."
         } catch (error: Exception) {
-            statusView.text = "Could not start Bluetooth service: ${error.message}"
+            statusView.text = "Could not start the phone connection service: ${error.message}"
         }
     }
 
@@ -133,7 +131,7 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
             41 -> if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) startBridge()
-                  else statusView.text = "Bluetooth permissions are required for the phone link."
+                  else statusView.text = "Allow Nearby devices to start the connection service; USB requires the same service to be running."
             43 -> statusView.text = if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) "Call notifications enabled." else "Notifications are disabled in Android settings."
             44 -> statusView.text = if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) "Caller names from contacts enabled." else "Caller names will only come from caller ID or the Geronimo allowlist."
             45 -> statusView.text = if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) "Trusted contacts can use direct dialing." else "Trusted calls will open the phone dialer for manual confirmation."
