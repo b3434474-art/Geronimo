@@ -7,19 +7,26 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.OutcomeReceiver
 import android.provider.ContactsContract
 import android.telecom.Call
 import android.telecom.CallAudioState
+import android.telecom.CallEndpoint
+import android.telecom.CallEndpointException
 import android.telecom.InCallService
 import android.telecom.TelecomManager
 import android.telecom.VideoProfile
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
@@ -35,7 +42,6 @@ class GeronimoInCallService : InCallService() {
         @Volatile private var pendingDialName: String = ""
         private const val CHANNEL_ID = "geronimo_calls"
         private const val NOTIFICATION_ID = 4101
-        private var ringtonePlayer: MediaPlayer? = null
 
         /** A saved number may skip the dialer only when Android's CALL_PHONE permission is granted. */
         fun placeCall(number: String, contactName: String = "") {
@@ -66,22 +72,36 @@ class GeronimoInCallService : InCallService() {
         }
 
         fun setMutedFromUi(muted: Boolean) { serviceInstance?.setMuted(muted) }
+
         fun setSpeakerFromUi(enabled: Boolean) {
-            serviceInstance?.setAudioRoute(if (enabled) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_EARPIECE)
+            serviceInstance?.setSpeakerRoute(enabled)
         }
 
-        private fun stopRingtone() {
-            try {
-                ringtonePlayer?.let { player ->
-                    if (player.isPlaying) player.stop()
-                    player.release()
-                }
-            } catch (_: Exception) { }
-            ringtonePlayer = null
+        fun requestCallEndpointFromUi(identifier: String) {
+            val service = serviceInstance
+            if (service == null) {
+                CallBridge.send(JSONObject().put("event", "CALL_AUDIO_ROUTE_RESULT")
+                    .put("ok", false).put("message", "The Android call service is not available."))
+            } else {
+                service.requestCallEndpoint(identifier)
+            }
         }
     }
 
     private val callbacks = ConcurrentHashMap<Call, Call.Callback>()
+    private val lastPublishedEventByCall = ConcurrentHashMap<Call, String>()
+    private val callEndpoints = ConcurrentHashMap<String, CallEndpoint>()
+    private var ringtonePlayer: MediaPlayer? = null
+    private var ringtoneMode: String = ""
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var hasSentCallEnded = true
+
+    private val ringtoneFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        if (change == AudioManager.AUDIOFOCUS_LOSS ||
+            change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+            stopRingtone()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -101,31 +121,75 @@ class GeronimoInCallService : InCallService() {
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
         activeCall = call
+        hasSentCallEnded = false
         val callback = object : Call.Callback() {
-            override fun onStateChanged(changedCall: Call, state: Int) = publishCallState(changedCall, state)
-            override fun onDetailsChanged(changedCall: Call, details: Call.Details) = publishCallState(changedCall, changedCall.state)
+            override fun onStateChanged(changedCall: Call, state: Int) {
+                publishCallState(changedCall, state)
+            }
+
+            override fun onDetailsChanged(changedCall: Call, details: Call.Details) {
+                publishCallState(changedCall, changedCall.state)
+            }
         }
         callbacks[call] = callback
         call.registerCallback(callback)
         publishCallState(call, call.state)
+        sendCallAudioEndpoints()
     }
 
     override fun onCallRemoved(call: Call) {
         callbacks.remove(call)?.let { call.unregisterCallback(it) }
+        lastPublishedEventByCall.remove(call)
+
         if (activeCall === call) {
-            activeCall = null
-            activeCallerName = ""
+            val replacement = callbacks.keys.firstOrNull {
+                it.state != Call.STATE_DISCONNECTED && it.state != Call.STATE_DISCONNECTING
+            }
+            activeCall = replacement
+            if (replacement != null) {
+                publishCallState(replacement, replacement.state)
+            } else {
+                activeCallerName = ""
+                stopRingtone()
+                NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
+                publishCallEndedOnce()
+            }
         }
-        stopRingtone()
-        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
-        CallBridge.send(JSONObject().put("event", "CALL_ENDED"))
         super.onCallRemoved(call)
     }
 
+    private fun publishCallEndedOnce() {
+        if (hasSentCallEnded) return
+        hasSentCallEnded = true
+        CallBridge.send(JSONObject().put("event", "CALL_ENDED"))
+    }
+
     private fun publishCallState(call: Call, state: Int) {
+        if (state == Call.STATE_DISCONNECTED) {
+            stopRingtone()
+            if (activeCall === call) {
+                val replacement = callbacks.keys.firstOrNull {
+                    it !== call && it.state != Call.STATE_DISCONNECTED && it.state != Call.STATE_DISCONNECTING
+                }
+                activeCall = replacement
+                if (replacement != null) {
+                    publishCallState(replacement, replacement.state)
+                } else {
+                    activeCallerName = ""
+                    NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
+                    publishCallEndedOnce()
+                }
+            }
+            return
+        }
+
+        activeCall = call
         val number = call.details.handle?.schemeSpecificPart ?: "Unknown number"
         val name = resolveCallerName(call, number)
         activeCallerName = name
+        val fingerprint = "$state|$number|$name"
+        if (lastPublishedEventByCall.put(call, fingerprint) == fingerprint) return
+
         when (state) {
             Call.STATE_RINGING -> {
                 startRingtone(incoming = true)
@@ -142,10 +206,9 @@ class GeronimoInCallService : InCallService() {
                 showCallNotification("Call in progress", if (name.isNotBlank()) "$name · $number" else number)
                 CallBridge.send(JSONObject().put("event", "CALL_ACTIVE").put("number", number).put("name", name))
             }
-            Call.STATE_DISCONNECTED -> {
+            Call.STATE_HOLDING -> {
                 stopRingtone()
-                NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
-                CallBridge.send(JSONObject().put("event", "CALL_ENDED"))
+                CallBridge.send(JSONObject().put("event", "CALL_HOLDING").put("number", number).put("name", name))
             }
         }
     }
@@ -163,14 +226,145 @@ class GeronimoInCallService : InCallService() {
     }
 
     private fun startRingtone(incoming: Boolean) {
+        val requestedMode = if (incoming) "INCOMING" else "OUTGOING"
+        if (ringtoneMode == requestedMode && ringtonePlayer?.isPlaying == true) return
         stopRingtone()
+
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        val audioManager = getSystemService(AudioManager::class.java)
+        val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            .setAudioAttributes(attributes)
+            .setOnAudioFocusChangeListener(ringtoneFocusListener)
+            .build()
+        if (audioManager.requestAudioFocus(focusRequest) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) return
+
+        audioFocusRequest = focusRequest
         try {
             val soundRes = if (incoming) R.raw.incoming_ringtone else R.raw.outgoing_ringtone
-            val player = MediaPlayer.create(this, soundRes) ?: return
+            val player = MediaPlayer.create(this, soundRes, attributes, 0) ?: run {
+                stopRingtone()
+                return
+            }
             player.isLooping = true
             ringtonePlayer = player
+            ringtoneMode = requestedMode
             player.start()
-        } catch (_: Exception) { stopRingtone() }
+        } catch (_: Exception) {
+            stopRingtone()
+        }
+    }
+
+    private fun stopRingtone() {
+        try {
+            ringtonePlayer?.let { player ->
+                if (player.isPlaying) player.stop()
+                player.release()
+            }
+        } catch (_: Exception) { }
+        ringtonePlayer = null
+        ringtoneMode = ""
+        audioFocusRequest?.let { request ->
+            try {
+                getSystemService(AudioManager::class.java).abandonAudioFocusRequest(request)
+            } catch (_: Exception) { }
+        }
+        audioFocusRequest = null
+    }
+
+    override fun onAvailableCallEndpointsChanged(availableEndpoints: MutableList<CallEndpoint>) {
+        super.onAvailableCallEndpointsChanged(availableEndpoints)
+        callEndpoints.clear()
+        availableEndpoints.forEach { endpoint ->
+            callEndpoints[endpoint.identifier.toString()] = endpoint
+        }
+        sendCallAudioEndpoints()
+    }
+
+    override fun onCallEndpointChanged(callEndpoint: CallEndpoint) {
+        super.onCallEndpointChanged(callEndpoint)
+        sendCallAudioEndpoints()
+    }
+
+    private fun endpointTypeName(type: Int): String = when (type) {
+        CallEndpoint.TYPE_EARPIECE -> "EARPIECE"
+        CallEndpoint.TYPE_BLUETOOTH -> "BLUETOOTH"
+        CallEndpoint.TYPE_WIRED_HEADSET -> "WIRED_HEADSET"
+        CallEndpoint.TYPE_SPEAKER -> "SPEAKER"
+        CallEndpoint.TYPE_STREAMING -> "EXTERNAL"
+        else -> "UNKNOWN"
+    }
+
+    private fun sendCallAudioEndpoints() {
+        if (Build.VERSION.SDK_INT < 34) return
+        try {
+            val current = getCurrentCallEndpoint()
+            val available = JSONArray()
+            callEndpoints.values
+                .sortedWith(compareBy<CallEndpoint> { it.endpointType }.thenBy { it.endpointName.toString() })
+                .forEach { endpoint ->
+                    available.put(JSONObject()
+                        .put("id", endpoint.identifier.toString())
+                        .put("name", endpoint.endpointName.toString())
+                        .put("type", endpoint.endpointType)
+                        .put("typeName", endpointTypeName(endpoint.endpointType)))
+                }
+            CallBridge.send(JSONObject()
+                .put("event", "CALL_AUDIO_ENDPOINTS")
+                .put("available", available)
+                .put("currentId", current.identifier.toString())
+                .put("currentName", current.endpointName.toString())
+                .put("currentType", current.endpointType)
+                .put("currentTypeName", endpointTypeName(current.endpointType)))
+        } catch (_: Exception) {
+            // Telecom may not have a current endpoint until a call is active.
+        }
+    }
+
+    private fun requestCallEndpoint(identifier: String) {
+        if (Build.VERSION.SDK_INT < 34) {
+            CallBridge.send(JSONObject().put("event", "CALL_AUDIO_ROUTE_RESULT")
+                .put("ok", false).put("message", "Audio route selection requires Android 14 or newer."))
+            return
+        }
+        val endpoint = callEndpoints[identifier]
+        if (endpoint == null) {
+            sendCallAudioEndpoints()
+            CallBridge.send(JSONObject().put("event", "CALL_AUDIO_ROUTE_RESULT")
+                .put("ok", false).put("message", "That audio device is no longer available. Refresh the list and try again."))
+            return
+        }
+        try {
+            requestCallEndpointChange(endpoint, mainExecutor, object : OutcomeReceiver<Void, CallEndpointException> {
+                override fun onResult(result: Void?) {
+                    CallBridge.send(JSONObject().put("event", "CALL_AUDIO_ROUTE_RESULT")
+                        .put("ok", true).put("message", "Android accepted the audio route request for ${endpoint.endpointName}."))
+                }
+
+                override fun onError(error: CallEndpointException) {
+                    CallBridge.send(JSONObject().put("event", "CALL_AUDIO_ROUTE_RESULT")
+                        .put("ok", false).put("message", error.message ?: "Android could not change the call audio route."))
+                }
+            })
+        } catch (error: Exception) {
+            CallBridge.send(JSONObject().put("event", "CALL_AUDIO_ROUTE_RESULT")
+                .put("ok", false).put("message", error.message ?: "Android could not change the call audio route."))
+        }
+    }
+
+    private fun setSpeakerRoute(enabled: Boolean) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            val type = if (enabled) CallEndpoint.TYPE_SPEAKER else CallEndpoint.TYPE_EARPIECE
+            val endpoint = callEndpoints.values.firstOrNull { it.endpointType == type }
+            if (endpoint != null) {
+                requestCallEndpoint(endpoint.identifier.toString())
+                return
+            }
+        }
+        @Suppress("DEPRECATION")
+        setAudioRoute(if (enabled) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_EARPIECE)
     }
 
     private fun createCallChannel() {
