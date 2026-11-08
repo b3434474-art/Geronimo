@@ -80,7 +80,7 @@ class GeronimoApp(OriginalGeronimoApp):
             self.phone_bridge.start()
             self.phone_status.set("SEARCHING FOR GERONIMO PHONE…")
         except Exception as exc:
-            messagebox.showerror("Bluetooth unavailable", f"Install the app requirements first.\n\n{exc}", parent=self.root)
+            messagebox.showerror("Phone connection unavailable", f"Check the connection setup and app requirements.\n\n{exc}", parent=self.root)
 
     def _on_phone_status(self, message: str):
         self.root.after(0, lambda: self.phone_status.set(message.upper()[:100]))
@@ -116,7 +116,8 @@ class GeronimoApp(OriginalGeronimoApp):
         elif kind == "CALL_ERROR":
             messagebox.showerror("Phone call", str(event.get("message", "The phone reported an error.")), parent=self.root)
         elif kind == "PHONE_READY":
-            self.phone_status.set("PHONE READY · BLUETOOTH CONNECTED")
+            transport = str(event.get("transport", "BLUETOOTH")).upper()
+            self.phone_status.set(f"PHONE READY · {transport} CONNECTED")
             for contact in self.contacts:
                 self._send_phone_command({
                     "command": "ALLOWLIST_ADD",
@@ -198,7 +199,7 @@ class GeronimoApp(OriginalGeronimoApp):
         win.geometry("510x390")
         tk.Label(win, text="PHONE COMPANION", bg="#071426", fg="#58A9FF",
                  font=("Segoe UI", 12, "bold")).pack(anchor="w", padx=18, pady=(16, 4))
-        tk.Label(win, text="Call controls use Bluetooth. Incoming calls still require you to press Answer.",
+        tk.Label(win, text="USB is preferred when connected; Bluetooth is the fallback. Incoming calls still require you to press Answer.",
                  bg="#071426", fg="#9DB5D0", wraplength=470, justify="left").pack(anchor="w", padx=18, pady=(0, 10))
         number = tk.StringVar()
         tk.Entry(win, textvariable=number, bg="#10233D", fg="#EAF4FF", insertbackground="#EAF4FF",
