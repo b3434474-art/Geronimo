@@ -76,11 +76,12 @@ class MainActivity : Activity() {
         setContentView(content)
 
         requestNotificationPermissionIfNeeded()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasBluetoothPermissions()) {
-            // USB should still start even when the user declines the optional Bluetooth fallback.
-            startBridge()
+        if (Build.VERSION.SDK_INT >= 34 && !hasConnectionServicePermission()) {
+            // Android 14+ requires a qualifying runtime permission before this connected-device
+            // foreground service can start. USB itself still uses ADB, not Bluetooth pairing.
             ActivityCompat.requestPermissions(this,
-                arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_CONNECT), 41)
+                arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE), 41)
+            statusView.text = "Allow at least one Nearby devices permission to keep the phone link running. USB still uses authorized ADB, not Bluetooth pairing."
         } else {
             startBridge()
         }
@@ -111,10 +112,10 @@ class MainActivity : Activity() {
         } else ActivityCompat.requestPermissions(this, arrayOf(permission), requestCode)
     }
 
-    private fun hasBluetoothPermissions(): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED &&
-             ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED)
+    private fun hasConnectionServicePermission(): Boolean =
+        Build.VERSION.SDK_INT < 34 ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED
 
     private fun startBridge() {
         try {
@@ -128,12 +129,11 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
-            41 -> if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                startService(Intent(this, GeronimoConnectionService::class.java)
-                    .setAction(GeronimoConnectionService.ACTION_RESTART_BLUETOOTH))
-                statusView.text = "Bluetooth fallback enabled. USB remains available."
+            41 -> if (hasConnectionServicePermission()) {
+                startBridge()
+                statusView.text = "Phone link started. USB uses authorized ADB; Bluetooth fallback works when both Nearby devices permissions are allowed."
             } else {
-                statusView.text = "Bluetooth fallback not enabled. USB connection is still available."
+                statusView.text = "Android did not grant a permission needed for the persistent connection service. The service has not been started."
             }
             43 -> statusView.text = if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) "Call notifications enabled." else "Notifications are disabled in Android settings."
             44 -> statusView.text = if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) "Caller names from contacts enabled." else "Caller names will only come from caller ID or the Geronimo allowlist."
